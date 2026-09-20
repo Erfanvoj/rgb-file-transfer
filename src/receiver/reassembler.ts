@@ -1,5 +1,5 @@
-import { MAX_PAYLOAD_SIZE, HEADER_SIZE_BYTES, BYTES_PER_FRAME, MAGIC_BYTES } from '../config';
-import { calculateCRC16 } from '../protocol/chunker';
+import { MAX_PAYLOAD_SIZE } from '../config';
+import { unpackFrame } from '../protocol/chunker';
 import { PRNG, generateRobustSolitonCDF, sampleDegree, sampleChunkIndices } from '../protocol/fountain';
 
 export interface ReassemblerProgress {
@@ -62,27 +62,9 @@ export class Reassembler {
   }
 
   public handleFrame(fullFrame: Uint8Array): boolean {
-    if (fullFrame.length < BYTES_PER_FRAME) return false;
-    if (fullFrame[0] !== MAGIC_BYTES[0] || fullFrame[1] !== MAGIC_BYTES[1]) return false;
-
-    const dataView = new DataView(fullFrame.buffer, fullFrame.byteOffset, fullFrame.byteLength);
-    const receivedCrc = dataView.getUint16(7, false);
-
-    const frameCopy = new Uint8Array(fullFrame);
-    frameCopy[7] = 0;
-    frameCopy[8] = 0;
-    const computedCrc = calculateCRC16(frameCopy);
-
-    if (receivedCrc !== computedCrc) {
-      return false;
-    }
-
-    const fileId = fullFrame[2];
-    const seed = dataView.getUint16(3, false);
-    const totalChunks = dataView.getUint16(5, false);
-    const payload = fullFrame.slice(HEADER_SIZE_BYTES, BYTES_PER_FRAME);
-
-    this.handlePacket(fileId, totalChunks, seed, payload);
+    const packet = unpackFrame(fullFrame);
+    if (!packet) return false;
+    this.handlePacket(packet.fileId, packet.totalChunks, packet.seed, packet.payload);
     return true;
   }
 
@@ -319,10 +301,6 @@ export class Reassembler {
     }
   }
 
-  public handleChunk(fileId: number, totalChunks: number, seed: number, payload: Uint8Array): void {
-    this.handlePacket(fileId, totalChunks, seed, payload);
-  }
-
   public reset(): void {
     this.fileId = -1;
     this.totalChunks = 0;
@@ -366,14 +344,7 @@ export class Reassembler {
       fullBuffer.set(chunk, i * MAX_PAYLOAD_SIZE);
     }
 
-    let newlineIndex = -1;
-    for (let i = 0; i < fullBuffer.length; i++) {
-      if (fullBuffer[i] === 10) {
-        newlineIndex = i;
-        break;
-      }
-    }
-
+    const newlineIndex = fullBuffer.indexOf(10);
     if (newlineIndex === -1) return;
 
     const metaBytes = fullBuffer.slice(0, newlineIndex);

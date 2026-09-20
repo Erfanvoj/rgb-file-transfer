@@ -1,9 +1,7 @@
 import {
   GRID_SIZE,
   BYTES_PER_FRAME,
-  HEADER_SIZE_BYTES,
-  CALIBRATION_COLORS,
-  MAGIC_BYTES,
+  PALETTE,
   SENDER_CANVAS_SIZE,
   CELL_SIZE,
   NORMALIZED_BUFFER_SIZE,
@@ -19,9 +17,9 @@ import {
   CLOCK_UPPER_THRESHOLD,
 } from '../config';
 import {
-  calculateCRC16,
   computeChannelThresholds,
   colorToBits,
+  unpackFrame,
   type RGB,
 } from '../protocol/chunker';
 import {
@@ -43,13 +41,6 @@ export interface HudUpdateMessage {
   corners: [Point, Point, Point, Point] | null;
   thumbnailBuffer: ArrayBuffer | null;
   frameValid: boolean;
-  clockLuminance?: number;
-  clockState?: 'LOW' | 'HIGH' | 'TRANSITION' | 'DUPLICATE';
-  chunkInfo?: {
-    fileId: number;
-    seed: number;
-    totalChunks: number;
-  };
 }
 
 export interface ChunkReceivedMessage {
@@ -121,7 +112,7 @@ function processFrame(camData: Uint8ClampedArray, width: number, height: number)
   const stripY = CALIBRATION_STRIP_Y * scale;
   const stripHeight = CALIBRATION_STRIP_HEIGHT * scale;
 
-  const numCalibColors = CALIBRATION_COLORS.length;
+  const numCalibColors = PALETTE.length;
   const calibBlockWidth = stripWidth / numCalibColors;
   const calibrationSamples: RGB[] = [];
 
@@ -153,25 +144,16 @@ function processFrame(camData: Uint8ClampedArray, width: number, height: number)
   }
 
   let currentClockState = -1;
-  let clockStateLabel: 'LOW' | 'HIGH' | 'TRANSITION' | 'DUPLICATE' = 'TRANSITION';
-
   if (L <= CLOCK_LOWER_THRESHOLD) {
     currentClockState = 0;
-    clockStateLabel = 'LOW';
   } else if (L >= CLOCK_UPPER_THRESHOLD) {
     currentClockState = 1;
-    clockStateLabel = 'HIGH';
   }
 
   const isTransition = currentClockState === -1;
   const isDuplicate = !isTransition && lastDecodedClockState !== null && currentClockState === lastDecodedClockState;
 
-  if (isDuplicate) {
-    clockStateLabel = 'DUPLICATE';
-  }
-
   let frameValid = false;
-  let chunkInfo: { fileId: number; seed: number; totalChunks: number } | undefined;
 
   if (!isTransition && !isDuplicate) {
     const matrixSize = GRID_SIZE * CELL_SIZE * scale;
@@ -210,35 +192,21 @@ function processFrame(camData: Uint8ClampedArray, width: number, height: number)
       }
     }
 
-    if (fullFrame[0] === MAGIC_BYTES[0] && fullFrame[1] === MAGIC_BYTES[1]) {
-      const dataView = new DataView(fullFrame.buffer);
-      const receivedChecksum = dataView.getUint16(7, false);
+    const packet = unpackFrame(fullFrame);
+    if (packet) {
+      frameValid = true;
+      lastDecodedClockState = currentClockState;
 
-      dataView.setUint16(7, 0, false);
-      const calculatedChecksum = calculateCRC16(fullFrame);
-
-      if (receivedChecksum === calculatedChecksum) {
-        frameValid = true;
-        lastDecodedClockState = currentClockState;
-
-        const fileId = fullFrame[2];
-        const seed = dataView.getUint16(3, false);
-        const totalChunks = dataView.getUint16(5, false);
-        const payload = fullFrame.slice(HEADER_SIZE_BYTES, BYTES_PER_FRAME);
-
-        chunkInfo = { fileId, seed, totalChunks };
-
-        workerScope.postMessage(
-          {
-            type: 'CHUNK_RECEIVED',
-            fileId,
-            totalChunks,
-            seed,
-            payload,
-          },
-          [payload.buffer as ArrayBuffer]
-        );
-      }
+      workerScope.postMessage(
+        {
+          type: 'CHUNK_RECEIVED',
+          fileId: packet.fileId,
+          totalChunks: packet.totalChunks,
+          seed: packet.seed,
+          payload: packet.payload,
+        },
+        [packet.payload.buffer as ArrayBuffer]
+      );
     }
   }
 
@@ -257,12 +225,9 @@ function processFrame(camData: Uint8ClampedArray, width: number, height: number)
       type: 'HUD_UPDATE',
       state: 'ORIENTATION_VERIFIED',
       candidates: detection.candidates,
-      corners: detection.orderedPoints,
+      corners: detection.corners,
       thumbnailBuffer: thumbBuffer,
       frameValid,
-      clockLuminance: L,
-      clockState: clockStateLabel,
-      chunkInfo,
     },
     [thumbBuffer]
   );

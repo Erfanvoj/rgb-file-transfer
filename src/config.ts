@@ -10,10 +10,8 @@ export const MAX_PAYLOAD_SIZE = BYTES_PER_FRAME - HEADER_SIZE_BYTES; // 87 bytes
 export const MAGIC_BYTES = new Uint8Array([0xAB, 0xCD]);
 
 export const FRAME_HOLD_MS = 160; // ~6.25 FPS baseline for exposure settlement and AWB convergence
-export const CLOCK_TRANSITION_THRESHOLD = 0.80;
 export const CLOCK_LOWER_THRESHOLD = 0.25;
 export const CLOCK_UPPER_THRESHOLD = 0.75;
-export const FPS = Math.round(1000 / FRAME_HOLD_MS);
 export const SENDER_CANVAS_SIZE = 600;
 
 export const CELL_SIZE = 25;
@@ -45,8 +43,6 @@ export const PALETTE = [
   { hex: '#FFFF00', r: 255, g: 255, b: 0 },
   { hex: '#FFFFFF', r: 255, g: 255, b: 255 },
 ] as const;
-
-export const CALIBRATION_COLORS = PALETTE;
 
 export const ANCHOR_COLOR_TL = '#FF00FF';
 export const ANCHOR_COLOR_OTHER = '#00FFFF';

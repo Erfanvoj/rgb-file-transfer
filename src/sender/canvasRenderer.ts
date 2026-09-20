@@ -1,6 +1,6 @@
 import {
   GRID_SIZE,
-  CALIBRATION_COLORS,
+  PALETTE,
   ANCHOR_SIZE,
   QUIET_MARGIN,
   ANCHOR_COLOR_TL,
@@ -81,7 +81,7 @@ export class CanvasRenderer {
   private renderFrame(index: number, seqId: number): void {
     if (!this.chunker) return;
 
-    const { fullFrame } = this.chunker.getFrame(index, seqId);
+    const fullFrame = this.chunker.getFrame(index);
     const { width, height } = this.canvas;
 
     this.ctx.fillStyle = '#000000';
@@ -93,9 +93,9 @@ export class CanvasRenderer {
     this.drawAnchor(width - QUIET_MARGIN - ANCHOR_SIZE, height - QUIET_MARGIN - ANCHOR_SIZE, ANCHOR_COLOR_OTHER);
 
     if (CALIBRATION_STRIP_WIDTH > 0 && CALIBRATION_STRIP_HEIGHT > 0) {
-      const blockWidth = CALIBRATION_STRIP_WIDTH / CALIBRATION_COLORS.length;
-      for (let i = 0; i < CALIBRATION_COLORS.length; i++) {
-        this.ctx.fillStyle = CALIBRATION_COLORS[i].hex;
+      const blockWidth = CALIBRATION_STRIP_WIDTH / PALETTE.length;
+      for (let i = 0; i < PALETTE.length; i++) {
+        this.ctx.fillStyle = PALETTE[i].hex;
         this.ctx.fillRect(CALIBRATION_STRIP_X + i * blockWidth, CALIBRATION_STRIP_Y, blockWidth, CALIBRATION_STRIP_HEIGHT);
       }
     }

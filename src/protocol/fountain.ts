@@ -83,9 +83,7 @@ export function sampleChunkIndices(prng: PRNG, K: number, degree: number): numbe
     return [prng.nextInt(Math.max(1, K))];
   }
   if (degree >= K) {
-    const all = new Array<number>(K);
-    for (let i = 0; i < K; i++) all[i] = i;
-    return all;
+    return Array.from({ length: K }, (_, i) => i);
   }
 
   const selected = new Set<number>();

@@ -1,16 +1,19 @@
 import { BYTES_PER_FRAME, HEADER_SIZE_BYTES, MAX_PAYLOAD_SIZE, MAGIC_BYTES, PALETTE } from '../config';
 import { PRNG, generateRobustSolitonCDF, sampleDegree, sampleChunkIndices } from './fountain';
 
-export interface FramePacket {
-  fullFrame: Uint8Array;
-}
-
 export type RGB = { r: number; g: number; b: number };
 
 export interface ChannelThresholds {
   tr: number;
   tg: number;
   tb: number;
+}
+
+export interface UnpackedFrame {
+  fileId: number;
+  seed: number;
+  totalChunks: number;
+  payload: Uint8Array;
 }
 
 const CRC16_TABLE = new Uint16Array(256);
@@ -28,6 +31,28 @@ export function calculateCRC16(data: Uint8Array): number {
     crc = ((crc << 8) ^ CRC16_TABLE[((crc >> 8) ^ data[i]) & 0xff]) & 0xffff;
   }
   return crc;
+}
+
+export function unpackFrame(fullFrame: Uint8Array): UnpackedFrame | null {
+  if (fullFrame.length < BYTES_PER_FRAME || fullFrame[0] !== MAGIC_BYTES[0] || fullFrame[1] !== MAGIC_BYTES[1]) {
+    return null;
+  }
+  const view = new DataView(fullFrame.buffer, fullFrame.byteOffset, fullFrame.byteLength);
+  const receivedCrc = view.getUint16(7, false);
+  view.setUint16(7, 0, false);
+  const calculatedCrc = calculateCRC16(fullFrame);
+  view.setUint16(7, receivedCrc, false);
+
+  if (receivedCrc !== calculatedCrc) {
+    return null;
+  }
+
+  return {
+    fileId: fullFrame[2],
+    seed: view.getUint16(3, false),
+    totalChunks: view.getUint16(5, false),
+    payload: fullFrame.slice(HEADER_SIZE_BYTES, BYTES_PER_FRAME),
+  };
 }
 
 export function bitsToColorHex(bits: number): string {
@@ -118,11 +143,7 @@ export class Chunker {
     return this.totalChunks;
   }
 
-  public get id(): number {
-    return this.fileId;
-  }
-
-  public getFrame(seed: number, _seqId?: number): FramePacket {
+  public getFrame(seed: number): Uint8Array {
     const seed16 = seed & 0xffff;
     const prng = new PRNG(seed16);
 
@@ -150,6 +171,6 @@ export class Chunker {
     const crc = calculateCRC16(fullFrame);
     view.setUint16(7, crc, false);
 
-    return { fullFrame };
+    return fullFrame;
   }
 }

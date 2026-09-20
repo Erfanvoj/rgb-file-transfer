@@ -95,7 +95,7 @@ async function runEndToEndTransferTest(fileSize: number, lossRate: number, shuff
 
       for (let seed = 0; seed < totalToGenerate; seed++) {
         if (Math.random() < lossRate) continue;
-        const frame = chunker.getFrame(seed).fullFrame;
+        const frame = chunker.getFrame(seed);
         streamPool.push(frame);
       }
 
@@ -114,7 +114,7 @@ async function runEndToEndTransferTest(fileSize: number, lossRate: number, shuff
     const maxSeed = K * 5 + 100;
     while (!completed && seed < maxSeed) {
       if (Math.random() >= lossRate) {
-        const frame = chunker.getFrame(seed).fullFrame;
+        const frame = chunker.getFrame(seed);
         reassembler.handleFrame(frame);
       }
       seed++;

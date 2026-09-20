@@ -18,19 +18,11 @@ export interface CandidateMarker {
   score: number;
 }
 
-export interface LockedCorners {
-  topLeft: Point;
-  topRight: Point;
-  bottomRight: Point;
-  bottomLeft: Point;
-}
-
 export type TrackingState = 'SEARCHING' | 'ANCHORS_LOCKED' | 'ORIENTATION_VERIFIED';
 
 export interface DetectionResult {
   state: TrackingState;
-  corners: LockedCorners | null;
-  orderedPoints: [Point, Point, Point, Point] | null;
+  corners: [Point, Point, Point, Point] | null;
   candidates: CandidateMarker[];
   homography: number[] | null;
 }
@@ -99,7 +91,6 @@ export function detectAnchors(
     return {
       state: 'SEARCHING',
       corners: null,
-      orderedPoints: null,
       candidates: [],
       homography: null,
     };
@@ -217,7 +208,6 @@ export function detectAnchors(
     return {
       state: 'SEARCHING',
       corners: null,
-      orderedPoints: null,
       candidates,
       homography: null,
     };
@@ -318,31 +308,22 @@ export function detectAnchors(
     return {
       state: candidates.length >= 4 ? 'ANCHORS_LOCKED' : 'SEARCHING',
       corners: null,
-      orderedPoints: null,
       candidates,
       homography: null,
     };
   }
 
-  const lockedCorners: LockedCorners = {
-    topLeft: bestQuad[0],
-    topRight: bestQuad[1],
-    bottomRight: bestQuad[2],
-    bottomLeft: bestQuad[3],
-  };
-
-  const homography = computeHomographyMatrix(lockedCorners, NORMALIZED_BUFFER_SIZE);
+  const homography = computeHomographyMatrix(bestQuad, NORMALIZED_BUFFER_SIZE);
 
   return {
     state: 'ORIENTATION_VERIFIED',
-    corners: lockedCorners,
-    orderedPoints: bestQuad,
+    corners: bestQuad,
     candidates,
     homography,
   };
 }
 
-export function computeHomographyMatrix(corners: LockedCorners, normSize: number = NORMALIZED_BUFFER_SIZE): number[] | null {
+export function computeHomographyMatrix(dst: [Point, Point, Point, Point], normSize: number = NORMALIZED_BUFFER_SIZE): number[] | null {
   const logicalCenterTL = QUIET_MARGIN + ANCHOR_SIZE / 2;
   const logicalCenterBR = SENDER_CANVAS_SIZE - QUIET_MARGIN - ANCHOR_SIZE / 2;
 
@@ -355,13 +336,6 @@ export function computeHomographyMatrix(corners: LockedCorners, normSize: number
     { x: uBR, y: uTL },
     { x: uBR, y: uBR },
     { x: uTL, y: uBR },
-  ];
-
-  const dst = [
-    corners.topLeft,
-    corners.topRight,
-    corners.bottomRight,
-    corners.bottomLeft,
   ];
 
   const matrixA: number[][] = [];
@@ -384,13 +358,6 @@ export function computeHomographyMatrix(corners: LockedCorners, normSize: number
   if (!h) return null;
 
   return [...h, 1];
-}
-
-export function transformPoint(H: number[], u: number, v: number): Point {
-  const w = H[6] * u + H[7] * v + H[8];
-  const x = (H[0] * u + H[1] * v + H[2]) / w;
-  const y = (H[3] * u + H[4] * v + H[5]) / w;
-  return { x, y };
 }
 
 export function warpPerspective(
